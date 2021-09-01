@@ -49,16 +49,16 @@ var mapping = map[string]string{
 
 type (
 	group struct {
-		routes           []route
+		Routes           []route
 		jwtEnabled       bool
 		signatureEnabled bool
 		authName         string
 		middlewares      []string
 	}
 	route struct {
-		method  string
-		path    string
-		handler string
+		Method  string
+		Path    string
+		Handler string
 	}
 )
 
@@ -73,14 +73,14 @@ func genRoutes(dir, rootPkg string, cfg *config.Config, api *spec.ApiSpec) error
 	for _, g := range groups {
 		var gbuilder strings.Builder
 		gbuilder.WriteString("[]rest.Route{")
-		for _, r := range g.routes {
+		for _, r := range g.Routes {
 			fmt.Fprintf(&gbuilder, `
 		{
 			Method:  %s,
 			Path:    "%s",
 			Handler: %s,
 		},`,
-				r.method, r.path, r.handler)
+				r.Method, r.Path, r.Handler)
 		}
 
 		var jwt string
@@ -124,19 +124,23 @@ func genRoutes(dir, rootPkg string, cfg *config.Config, api *spec.ApiSpec) error
 
 	filename := path.Join(dir, handlerDir, routeFilename)
 	os.Remove(filename)
+	data := struct {
+		ImportPackages string
+		Groups         []group
+	}{
+		ImportPackages: genRouteImports(rootPkg, api),
+		Groups:         groups,
+	}
 
 	return genFile(fileGenConfig{
 		dir:             dir,
 		subdir:          handlerDir,
 		filename:        routeFilename,
 		templateName:    "routesTemplate",
-		category:        "",
-		templateFile:    "",
+		category:        category,
+		templateFile:    routesTemplateFile,
 		builtinTemplate: routesTemplate,
-		data: map[string]string{
-			"importPackages":  genRouteImports(rootPkg, api),
-			"routesAdditions": strings.TrimSpace(builder.String()),
-		},
+		data:            data,
 	})
 }
 
@@ -169,7 +173,6 @@ func getRoutes(api *spec.ApiSpec) ([]group, error) {
 		var groupedRoutes group
 		for _, r := range g.Routes {
 			handler := getHandlerName(r)
-			handler = handler + "(serverCtx)"
 			folder := r.GetAnnotation(groupProperty)
 			if len(folder) > 0 {
 				handler = toPrefix(folder) + "." + strings.ToUpper(handler[:1]) + handler[1:]
@@ -179,10 +182,10 @@ func getRoutes(api *spec.ApiSpec) ([]group, error) {
 					handler = toPrefix(folder) + "." + strings.ToUpper(handler[:1]) + handler[1:]
 				}
 			}
-			groupedRoutes.routes = append(groupedRoutes.routes, route{
-				method:  mapping[r.Method],
-				path:    r.Path,
-				handler: handler,
+			groupedRoutes.Routes = append(groupedRoutes.Routes, route{
+				Method:  r.Method,
+				Path:    r.Path,
+				Handler: handler,
 			})
 		}
 

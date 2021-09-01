@@ -27,6 +27,12 @@ type fileGenConfig struct {
 	data            interface{}
 }
 
+var (
+	funcMap = template.FuncMap{
+		"ToUpper": strings.ToUpper,
+	}
+)
+
 func genFile(c fileGenConfig) error {
 	fp, created, err := util.MaybeCreateFile(c.dir, c.subdir, c.filename)
 	if err != nil {
@@ -47,7 +53,7 @@ func genFile(c fileGenConfig) error {
 		}
 	}
 
-	t := template.Must(template.New(c.templateName).Parse(text))
+	t := template.Must(template.New(c.templateName).Funcs(funcMap).Parse(text))
 	buffer := new(bytes.Buffer)
 	err = t.Execute(buffer, c.data)
 	if err != nil {
