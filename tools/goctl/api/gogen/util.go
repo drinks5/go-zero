@@ -30,6 +30,7 @@ type fileGenConfig struct {
 var (
 	funcMap = template.FuncMap{
 		"ToUpper": strings.ToUpper,
+		"join":    strings.Join,
 	}
 )
 

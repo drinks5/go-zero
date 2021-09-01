@@ -6,7 +6,6 @@ import (
 	"path"
 	"sort"
 	"strings"
-	"text/template"
 
 	"github.com/tal-tech/go-zero/core/collection"
 	"github.com/tal-tech/go-zero/tools/goctl/api/spec"
@@ -28,13 +27,26 @@ import (
 )
 
 func RegisterHandlers(engine *rest.Server, serverCtx *svc.ServiceContext) {
-	{{.routesAdditions}}
-}
-`
-	routesAdditionTemplate = `
 	engine.AddRoutes(
-		{{.routes}} {{.jwt}}{{.signature}}
+	{{range $group :=Groups}}
+		{{range $route := $group.Routes}}
+		[]rest.Route{
+			{
+				Method: .Method,
+				Path: .Path,
+				Handler: .Handler,
+			}
+		}
+		{{end}}
+		{{if .JwtEnabled}}
+		rest.WithJwt(serverCtx.Config.{{group.AuthName}}.AccessSecret),
+		{{end}}
+		{{if .SignatureEnabled }}
+		rest.WithSignature(serverCtx.Config.Signature),
+		{{end}}
+	{{end}}
 	)
+}
 `
 )
 
@@ -50,10 +62,10 @@ var mapping = map[string]string{
 type (
 	group struct {
 		Routes           []route
-		jwtEnabled       bool
-		signatureEnabled bool
-		authName         string
-		middlewares      []string
+		JwtEnabled       bool
+		SignatureEnabled bool
+		AuthName         string
+		Middlewares      []string
 	}
 	route struct {
 		Method  string
@@ -63,57 +75,9 @@ type (
 )
 
 func genRoutes(dir, rootPkg string, cfg *config.Config, api *spec.ApiSpec) error {
-	var builder strings.Builder
 	groups, err := getRoutes(api)
 	if err != nil {
 		return err
-	}
-
-	gt := template.Must(template.New("groupTemplate").Parse(routesAdditionTemplate))
-	for _, g := range groups {
-		var gbuilder strings.Builder
-		gbuilder.WriteString("[]rest.Route{")
-		for _, r := range g.Routes {
-			fmt.Fprintf(&gbuilder, `
-		{
-			Method:  %s,
-			Path:    "%s",
-			Handler: %s,
-		},`,
-				r.Method, r.Path, r.Handler)
-		}
-
-		var jwt string
-		if g.jwtEnabled {
-			jwt = fmt.Sprintf("\n rest.WithJwt(serverCtx.Config.%s.AccessSecret),", g.authName)
-		}
-		var signature string
-		if g.signatureEnabled {
-			signature = "\n rest.WithSignature(serverCtx.Config.Signature),"
-		}
-
-		var routes string
-		if len(g.middlewares) > 0 {
-			gbuilder.WriteString("\n}...,")
-			params := g.middlewares
-			for i := range params {
-				params[i] = "serverCtx." + params[i]
-			}
-			middlewareStr := strings.Join(params, ", ")
-			routes = fmt.Sprintf("rest.WithMiddlewares(\n[]rest.Middleware{ %s }, \n %s \n),",
-				middlewareStr, strings.TrimSpace(gbuilder.String()))
-		} else {
-			gbuilder.WriteString("\n},")
-			routes = strings.TrimSpace(gbuilder.String())
-		}
-
-		if err := gt.Execute(&builder, map[string]string{
-			"routes":    routes,
-			"jwt":       jwt,
-			"signature": signature,
-		}); err != nil {
-			return err
-		}
 	}
 
 	routeFilename, err := format.FileNamingFormat(cfg.NamingFormat, routesFilename)
@@ -191,17 +155,17 @@ func getRoutes(api *spec.ApiSpec) ([]group, error) {
 
 		jwt := g.GetAnnotation("jwt")
 		if len(jwt) > 0 {
-			groupedRoutes.authName = jwt
-			groupedRoutes.jwtEnabled = true
+			groupedRoutes.AuthName = jwt
+			groupedRoutes.JwtEnabled = true
 		}
 		signature := g.GetAnnotation("signature")
 		if signature == "true" {
-			groupedRoutes.signatureEnabled = true
+			groupedRoutes.SignatureEnabled = true
 		}
 		middleware := g.GetAnnotation("middleware")
 		if len(middleware) > 0 {
 			for _, item := range strings.Split(middleware, ",") {
-				groupedRoutes.middlewares = append(groupedRoutes.middlewares, item)
+				groupedRoutes.Middlewares = append(groupedRoutes.Middlewares, item)
 			}
 		}
 		routes = append(routes, groupedRoutes)
